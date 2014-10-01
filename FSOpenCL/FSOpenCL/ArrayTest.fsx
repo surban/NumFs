@@ -25,6 +25,16 @@ module NDArray =
     let size shape = shape |> Seq.reduce (*)
     let ndims shape = Seq.length shape
 
+    let rec allIndices shape = 
+        seq {
+            if List.isEmpty shape then
+                yield []
+            else
+                let mySize = List.head shape
+                for i in 0 .. mySize - 1 do
+                    for s in allIndices (List.tail shape) do
+                        yield i :: s
+        }
     
     let rec sliceData (slice: Slice list) (stride: int list) (shape: int list) (offset: int) =
         if List.isEmpty slice then 
@@ -33,25 +43,25 @@ module NDArray =
             else
                 failwith "slice does not match number of dimensions"
         else
-            let myStride = List.head stride
-            let myShape = List.head shape              
+            let myStride() = List.head stride
+            let myShape() = List.head shape              
             let checkRange idx =
                 if idx < 0 then failwith "element index may not be negative"
-                if idx >= myShape then failwithf "element index %d out of range <%d" idx myShape
+                if idx >= myShape() then failwithf "element index %d out of range <%d" idx (myShape())
 
             match List.head slice with 
                 | Element(i) -> 
                     checkRange i
                     let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) (List.tail stride) (List.tail shape) offset
-                    (tailShape, tailStride, tailOffset + myStride * i)
+                    (tailShape, tailStride, tailOffset + myStride() * i)
                 | Range(start, stop) ->
                     checkRange start; checkRange stop
                     if start > stop then failwith "range start %d must not be larger than range end %d" start stop
                     let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) (List.tail stride) (List.tail shape) offset
-                    ((stop - start)::tailShape, myStride::tailStride, tailOffset + myStride * start)
+                    ((stop - start)::tailShape, myStride()::tailStride, tailOffset + myStride() * start)
                 | All ->
                     let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) (List.tail stride) (List.tail shape) offset
-                    (myShape::tailShape, myStride::tailStride, tailOffset)
+                    (myShape()::tailShape, myStride()::tailStride, tailOffset)
                 | NewAxis ->
                     let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) stride shape offset
                     (1::tailShape, 1::tailStride, tailOffset)
@@ -86,6 +96,7 @@ module NDArray =
 
 
     type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int list, readOnlyIn: bool, orderIn: Order) =
+        
         let elem pos = 
             if ndims pos <> ndims shapeIn then
                 failwithf "index %A has different dimensionality than shape %A" pos shapeIn
@@ -96,6 +107,19 @@ module NDArray =
             else
                 offsetIn + (Seq.map2 (*) pos strideIn |> Seq.reduce (+))
 
+        let broadcastedIn =
+            List.exists (fun s -> s=0) strideIn
+        let singletonIn =
+            ndims shapeIn = 0 || size shapeIn = 1
+
+        let checkWriteable() =
+            if readOnlyIn then failwith "view is read-only"
+            if broadcastedIn then failwith "view is broadcasted"
+        let checkSingleton() =
+            if not singletonIn then failwith "view is not a singleton"
+
+            
+
         member this.shape = shapeIn
         member this.offset = offsetIn
         member this.stride = strideIn
@@ -103,19 +127,38 @@ module NDArray =
         member this.ndims = ndims shapeIn
         member this.readOnly = readOnlyIn
         member this.order = orderIn
-        member this.broadcasted = List.exists (fun s -> s=0) strideIn
-        member this.singleton = this.ndims = 0 || this.size = 1
+        member this.broadcasted = broadcastedIn
+        member this.singleton = singletonIn
         member internal this.data = dataIn
 
-        member this.getValue pos = dataIn.[elem pos]
-        member this.setValue pos value = 
-            if readOnlyIn then failwith "view is read-only"
-            if this.broadcasted then failwith "view is broadcasted"
+        member this.readOnlyView() =
+            View(dataIn, offsetIn, strideIn, shapeIn, true, orderIn)
+
+        // single element access ------------------------------------------------------------
+        member this.getElement pos = dataIn.[elem pos]
+        member this.setElement pos value = 
+            checkWriteable()
             dataIn.[elem pos] <- value
 
-        member this.readOnlyView() =
-            new View(dataIn, offsetIn, strideIn, shapeIn, true, orderIn)
+        static member (.@) (view: View, pos: int list) =
+            view.getElement pos
+        // ----------------------------------------------------------------------------------
 
+        // singleton value access -----------------------------------------------------------
+        member this.getValue =
+            checkSingleton()
+            dataIn.[offsetIn]
+        member this.setValue value =
+            checkSingleton(); checkWriteable()
+            dataIn.[offsetIn] <- value
+
+//        static member (~%%) (view: View) =
+//            view.getValue 
+        static member (<--) (view: View, v: float) =
+            view.setValue v
+        // ----------------------------------------------------------------------------------
+
+        // slicing operators ----------------------------------------------------------------
         static member (.|) (view: View, s: Slice list) =
             let (sShape, sStride, sOffset) = sliceData s view.stride view.shape view.offset
             View(view.data, sOffset, sStride, sShape, view.readOnly, view.order)         
@@ -123,28 +166,26 @@ module NDArray =
         static member (.|) (view: View, pos: int list) =
             let s = List.map (fun i -> Element(i)) pos
             view.|s
+        // ----------------------------------------------------------------------------------
 
-        static member (.@) (view: View, pos: int list) =
-            view.getValue pos
-
-        static member (<==) (view: View, v: float) =
-            if not view.singleton then
-                failwith "cannot assign scalar to array of size > 1"
-            else
-                view.setValue (List.init view.ndims (fun _ -> 0)) v
-
-        override this.ToString() =
-            
-            
+        override this.ToString() = 
+            let rec asString (v: View) =
+                if v.singleton then
+                     sprintf "%3.3f" (v.getValue)
+                else
+                    let mutable contents = "["
+                    for i in 0 .. v.shape.Head-1 do
+                        contents <- contents + asString (v.|[Element(i); Fill])
+                        if i < v.shape.Head-1 then 
+                            contents <- contents + "; "
+                    contents + "]"
+            asString this         
 
 
     let slice (s: Slice list) (view: View)  =
         view.|s
 
-    let broadcast shape (view: View) =
-        let (bShape, bStride) = broadcastData shape view.shape view.stride
-        new View(view.data, view.offset, bStride, bShape, view.readOnly, view.order)
-
+    // shape handling -------------------------------------------------------------------
     let reshape shape (view: View) =
         if view.broadcasted then failwith "cannot reshape broadcasted view"
         if (size shape) <> view.size then failwithf "new size %A is different from current size %A"  (size shape) view.size
@@ -154,6 +195,15 @@ module NDArray =
         let fill = List.init n (fun _ -> 1)
         new View(view.data, view.offset, List.concat [view.stride; fill], 
                  List.concat [view.shape; fill], view.readOnly, view.order)                
+
+    let checkShapeMatch (v1: View) (v2: View) =
+        if v1.shape <> v2.shape then failwithf "array shape %A is different from %A" v1.shape v2.shape
+    // ----------------------------------------------------------------------------------
+
+    // broadcasting ---------------------------------------------------------------------
+    let broadcastToShape shape (view: View) =
+        let (bShape, bStride) = broadcastData shape view.shape view.stride
+        new View(view.data, view.offset, bStride, bShape, view.readOnly, view.order)
 
     let broadcastSecond (v1: View) (v2: View) =
         if v1.shape = v2.shape then 
@@ -175,7 +225,7 @@ module NDArray =
                                             | (d1, 1) -> d1
                                             | _ -> failwithf "cannot broadcast view of shape %A to shape %A" v2.shape v1.shape)
                             v1.shape nv2.shape
-            if bShape <> nv2.shape then nv2 <- broadcast bShape nv2
+            if bShape <> nv2.shape then nv2 <- broadcastToShape bShape nv2
             nv2          
 
     let broadcastBoth (v1: View) (v2: View) =
@@ -200,36 +250,24 @@ module NDArray =
                                             | (1, d2) -> d2
                                             | _ -> failwithf "cannot broadcast views of shape %A and %A to same shape" v1.shape v2.shape)
                             nv1.shape nv2.shape
-            if bShape <> nv1.shape then nv1 <- broadcast bShape nv1
-            if bShape <> nv2.shape then nv2 <- broadcast bShape nv2
+            if bShape <> nv1.shape then nv1 <- broadcastToShape bShape nv1
+            if bShape <> nv2.shape then nv2 <- broadcastToShape bShape nv2
 
             (nv1, nv2)
+                    
+    // ----------------------------------------------------------------------------------                    
                                                                   
     let zeros shape =
-        new View(Array.zeroCreate (size shape), 0, cStride shape, shape, false, C)
+        View(Array.zeroCreate (size shape), 0, cStride shape, shape, false, C)
 
     let ones shape =
-        new View(Array.init (size shape) (fun _ -> 1.0), 0, cStride shape, shape, false, C)
-
-    let rec allIndices shape = 
-        seq {
-            if List.isEmpty shape then
-                yield []
-            else
-                let mySize = List.head shape
-                for i in 0 .. mySize - 1 do
-                    for s in allIndices (List.tail shape) do
-                        yield i :: s
-        }
-
-    let checkShapeMatch (v1: View) (v2: View) =
-        if v1.shape <> v2.shape then failwithf "array shape %A is different from %A" v1.shape v2.shape
+        View(Array.init (size shape) (fun _ -> 1.0), 0, cStride shape, shape, false, C)
       
     let map2 f v1 v2 =
         checkShapeMatch v1 v2
         let vo = zeros v1.shape
         for idx in allIndices v1.shape do
-            vo.setValue idx (f (v1.getValue idx) (v2.getValue idx))
+            vo.setElement idx (f (v1.getElement idx) (v2.getElement idx))
         vo
         
     let mapb2 f v1 v2 =
@@ -239,7 +277,7 @@ module NDArray =
     let iter2 f v1 v2 =
         checkShapeMatch v1 v2
         for idx in allIndices v1.shape do
-            f (v1.getValue idx) (v2.getValue idx)
+            f (v1.getElement idx) (v2.getElement idx)
 
     let iterb2 f v1 v2 =
         let cv1, cv2 = broadcastBoth v1 v2
@@ -251,11 +289,14 @@ module NDArray =
     *)
 
     type View with
-        static member (<==) (view: View, view2: View) =
+        static member (<--) (view: View, view2: View) =
             let bView2 = broadcastSecond view view2
             for idx in allIndices view.shape do
-                view.setValue idx (view2.@idx)
-                       
+                view.setElement idx (bView2.@idx)
+
+            
+            
+                     
 
 open NDArray
 
@@ -272,4 +313,10 @@ printfn "A2 stride: %A" a2.stride
 printfn "A2 offset: %A" a2.offset
 
 let (a1b, a2b) = NDArray.broadcastBoth a1 a2
+
+a1.|[0;0;1] <-- 123.0
+
+printfn "a1.ToString = %s" (a1.ToString())
+printfn "a2.ToString = %s" (a2.ToString())
+
 
