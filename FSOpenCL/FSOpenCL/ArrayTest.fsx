@@ -87,6 +87,8 @@ module NDArray =
 
     type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int list, readOnlyIn: bool, orderIn: Order) =
         let elem pos = 
+            if ndims pos <> ndims shapeIn then
+                failwithf "index %A has different dimensionality than shape %A" pos shapeIn
             if not (Seq.forall2 (<) pos shapeIn) then 
                 failwithf "index %A out of range %A" pos shapeIn
             if Seq.isEmpty pos then
@@ -130,6 +132,10 @@ module NDArray =
                 failwith "cannot assign scalar to array of size > 1"
             else
                 view.setValue (List.init view.ndims (fun _ -> 0)) v
+
+        override this.ToString() =
+            
+            
 
 
     let slice (s: Slice list) (view: View)  =
