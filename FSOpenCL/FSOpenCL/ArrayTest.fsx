@@ -188,13 +188,13 @@ module NDArray =
     // shape handling -------------------------------------------------------------------
     let reshape shape (view: View) =
         if view.broadcasted then failwith "cannot reshape broadcasted view"
-        if (size shape) <> view.size then failwithf "new size %A is different from current size %A"  (size shape) view.size
-        new View(view.data, view.offset, (mkStride view.order shape), shape, view.readOnly, view.order)
+        if (size shape) <> view.size then failwithf "new size %A is different from current size %A" (size shape) view.size
+        View(view.data, view.offset, (mkStride view.order shape), shape, view.readOnly, view.order)
 
     let padShape n (view: View) =
         let fill = List.init n (fun _ -> 1)
-        new View(view.data, view.offset, List.concat [view.stride; fill], 
-                 List.concat [view.shape; fill], view.readOnly, view.order)                
+        View(view.data, view.offset, List.concat [view.stride; fill], 
+             List.concat [view.shape; fill], view.readOnly, view.order)                
 
     let checkShapeMatch (v1: View) (v2: View) =
         if v1.shape <> v2.shape then failwithf "array shape %A is different from %A" v1.shape v2.shape
