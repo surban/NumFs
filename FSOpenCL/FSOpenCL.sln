@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.30723.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FSOpenCL", "FSOpenCL\FSOpenCL.fsproj", "{28918303-3FBD-4CB3-9E7D-8CAE1973C915}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NumFs", "NumFs\NumFs.fsproj", "{28918303-3FBD-4CB3-9E7D-8CAE1973C915}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
