@@ -190,9 +190,10 @@ type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int l
             allIndices v.shape
             |> Seq.map (fun pos -> (v.|pos).FormatValue.Length) 
             |> Seq.max                                                  
-       
+        let itemWidth = fieldWidth + 3
+
         let rec genOutput width (v: View) =
-            let elemsPerLine = if width >= fieldWidth then width / fieldWidth else 1
+            let elemsPerLine = if width >= itemWidth then width / itemWidth else 1
             match v.ndims with
             | 0 -> v.FormatValue.PadLeft(fieldWidth)
             | 1 ->
@@ -202,8 +203,8 @@ type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int l
                     contents <- contents + (v.|[Element(i)]).FormatValue.PadLeft(fieldWidth)
                     if i < n-1 then 
                         contents <- contents + ";  "
-                    if i > 1 && i % elemsPerLine = 0 then
-                        contents <- contents + "\n  "
+                        if (i+1) % elemsPerLine = 0 then
+                            contents <- contents + "\n  "
                 contents + "]"
             | _ ->
                 let n = v.shape.Head
@@ -212,7 +213,7 @@ type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int l
                     let subOut = genOutput (width-1) (v.|[Element(i); Fill])                    
                     contents <- contents + subOut.Replace("\n", "\n ")
                     if i < n-1 then 
-                        contents <- contents + "\n "
+                        contents <- contents + String.replicate (v.ndims-1) "\n "
                 contents + "]"
         let out = genOutput width v
         if v.ndims > 1 then "\n" + out else out
