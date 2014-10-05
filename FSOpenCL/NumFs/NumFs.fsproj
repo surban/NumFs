@@ -57,6 +57,7 @@
     <None Include="App.config" />
     <Content Include="packages.config" />
     <Compile Include="NDArray.fs" />
+    <Compile Include="Compiler.fs" />
     <None Include="NDArrayTest.fsx" />
   </ItemGroup>
   <ItemGroup>

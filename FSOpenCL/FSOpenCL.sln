@@ -7,6 +7,13 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NumFs", "NumFs\NumFs.fsproj
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NumFsTest", "NumFsTest\NumFsTest.fsproj", "{A1B3F839-952E-4036-A2CC-87D41F7E4E23}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{78ADEB9A-238D-4DF9-B45C-F8CF218EB65A}"
+	ProjectSection(SolutionItems) = preProject
+		.nuget\packages.config = .nuget\packages.config
+	EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NumFsUnitTest", "NumFsUnitTest\NumFsUnitTest.fsproj", "{C24E0A49-E5B8-468E-8286-1BD6EB6F66B3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +28,10 @@ Global
 		{A1B3F839-952E-4036-A2CC-87D41F7E4E23}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B3F839-952E-4036-A2CC-87D41F7E4E23}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B3F839-952E-4036-A2CC-87D41F7E4E23}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C24E0A49-E5B8-468E-8286-1BD6EB6F66B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C24E0A49-E5B8-468E-8286-1BD6EB6F66B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C24E0A49-E5B8-468E-8286-1BD6EB6F66B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C24E0A49-E5B8-468E-8286-1BD6EB6F66B3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,18 +1,35 @@
-﻿open NDArray
+﻿open Microsoft.FSharp.Quotations
 
-let a1 = NDArray.zeros [2; 3; 20]
-let a2 = a1.|[All; Fill; Element(1)] 
-let a3 = a1.|[Element(0); All; Element(1)]
-let (a1b, a2b) = NDArray.broadcastBoth a1 a2
+open NDArray
+open Compiler
 
-a1.|[0;0;1] <-- 342.436234282
+let a1 = NDArray.zeros [3; 3]
+a1.|[0;0] <-- 3.14159
+a1.|[1;1] <-- 2.71828
+a1.|[2;2] <-- 1.0
+a1.|[0;2] <-- -1.0
 
-printfn "a1.ToString = %s" (a1.ToString())
-printfn "a2.ToString = %s" (a2.ToString())
 
-printfn "a1 = %A" a1
-printfn "a2 = %A" a2
-printfn "a3 = %A" a3
+type ViewMeta = {a: float}
+let a1m = {a=0.}
 
+[<ReflectedDefinition>]
+let testHost (a: View) = a + 1.
+
+[<ReflectedDefinition>]
+let testTarget (a: View) = 2. * a
+
+[<ReflectedDefinition>]
+let testMeta (a: ViewMeta) = {a=2.*a.a}
+
+registerTargetFunc <@ testHost a1 @> <@ testTarget a1 @> <@ testMeta a1m @>
+registerType typeof<View> typeof<ViewMeta>
+
+
+let b = 3
+let input = <@ 3. + testHost a1  @>
+printfn "original expr:     %A" input
+let output = substTargetFuncs input 
+printfn "substituted expr:  %A" output
 
 

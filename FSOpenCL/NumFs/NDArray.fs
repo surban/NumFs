@@ -36,11 +36,11 @@ let rec allIndices shape =
     
 let rec sliceData (slice: Slice list) (stride: int list) (shape: int list) (offset: int) =
     if List.isEmpty slice then 
-        if List.isEmpty shape then
-            ([], [], offset)
-        else
-            failwith "slice does not match number of dimensions"
+        if not (List.isEmpty shape) then failwith "slice does not match number of dimensions"
+        ([], [], offset)
     else
+        let checkDimAvailable() = 
+            if List.isEmpty shape then failwith "slice does not match number of dimensions"
         let myStride() = List.head stride
         let myShape() = List.head shape              
         let checkRange idx =
@@ -49,15 +49,16 @@ let rec sliceData (slice: Slice list) (stride: int list) (shape: int list) (offs
 
         match List.head slice with 
             | Element(i) -> 
-                checkRange i
+                checkDimAvailable(); checkRange i
                 let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) (List.tail stride) (List.tail shape) offset
                 (tailShape, tailStride, tailOffset + myStride() * i)
             | Range(start, stop) ->
-                checkRange start; checkRange stop
+                checkDimAvailable(); checkRange start; checkRange stop
                 if start > stop then failwith "range start %d must not be larger than range end %d" start stop
                 let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) (List.tail stride) (List.tail shape) offset
                 ((stop - start)::tailShape, myStride()::tailStride, tailOffset + myStride() * start)
             | All ->
+                checkDimAvailable()
                 let (tailShape, tailStride, tailOffset) = sliceData (List.tail slice) (List.tail stride) (List.tail shape) offset
                 (myShape()::tailShape, myStride()::tailStride, tailOffset)
             | NewAxis ->
@@ -166,8 +167,12 @@ type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int l
         view.|s
     // ----------------------------------------------------------------------------------
 
+    // formatting -----------------------------------------------------------------------
     member v.FormatValue =
         sprintf "%g" (v.getValue)
+
+    member v.StructuredFormat =
+        v.NiceOutput(1000, 78)
 
     override this.ToString() = 
         let rec asString (v: View) =
@@ -182,9 +187,6 @@ type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int l
                 contents + "]"
         asString this      
         
-    member v.StructuredFormat =
-        v.NiceOutput(1000, 78)
-
     member v.NiceOutput(length, width) =
         let fieldWidth = 
             allIndices v.shape
@@ -217,7 +219,7 @@ type View(dataIn: float array, offsetIn: int, strideIn: int list, shapeIn: int l
                 contents + "]"
         let out = genOutput width v
         if v.ndims > 1 then "\n" + out else out
-        
+    // ----------------------------------------------------------------------------------
 
 
 let slice (s: Slice list) (view: View)  =
@@ -294,13 +296,26 @@ let broadcastBoth (v1: View) (v2: View) =
         (nv1, nv2)
                     
 // ----------------------------------------------------------------------------------                    
-                                                                  
+
+// constructors ---------------------------------------------------------------------                                                                                     
 let zeros shape =
     View(Array.zeroCreate (size shape), 0, cStride shape, shape, false, C)
 
 let ones shape =
     View(Array.init (size shape) (fun _ -> 1.0), 0, cStride shape, shape, false, C)
-      
+
+let singleton v = 
+    let shape = [1]
+    View([|v|], 0, cStride shape, shape, false, C)
+// ----------------------------------------------------------------------------------                         
+
+// elementwise iterators ------------------------------------------------------------           
+let map f (v: View) =
+    let vo = zeros v.shape
+    for idx in allIndices v.shape do
+        vo.setElement idx (f (v.getElement idx))
+    vo
+         
 let map2 f v1 v2 =
     checkShapeMatch v1 v2
     let vo = zeros v1.shape
@@ -312,6 +327,10 @@ let mapb2 f v1 v2 =
     let cv1, cv2 = broadcastBoth v1 v2
     map2 f cv1 cv2
 
+let iter f (v: View) =
+    for idx in allIndices v.shape do
+        f (v.getElement idx)
+
 let iter2 f v1 v2 =
     checkShapeMatch v1 v2
     for idx in allIndices v1.shape do
@@ -320,15 +339,37 @@ let iter2 f v1 v2 =
 let iterb2 f v1 v2 =
     let cv1, cv2 = broadcastBoth v1 v2
     iter2 f cv1 cv2 
+// ----------------------------------------------------------------------------------                    
          
-(*
-let inline (+) (v1: View) (v2: View) =
-    mapb2 (+) v1 v2
-*)
-
 type View with
     static member (<--) (view: View, view2: View) =
         let bView2 = broadcastSecond view view2
         for idx in allIndices view.shape do
             view.setElement idx (bView2.@idx)
+
+    static member (+) (v: View, v': View) = mapb2 (+) v v'
+    static member (+) (v: View, n: float) = mapb2 (+) v (singleton n)
+    static member (+) (n: float, v: View) = mapb2 (+) (singleton n) v 
+
+    static member (-) (v: View, v': View) = mapb2 (-) v v'
+    static member (-) (v: View, n: float) = mapb2 (-) v (singleton n)
+    static member (-) (n: float, v: View) = mapb2 (-) (singleton n) v 
+
+    static member (*) (v: View, v': View) = mapb2 (*) v v'
+    static member (*) (v: View, n: float) = mapb2 (*) v (singleton n)
+    static member (*) (n: float, v: View) = mapb2 (*) (singleton n) v 
+
+    static member (/) (v: View, v': View) = mapb2 (/) v v'
+    static member (/) (v: View, n: float) = mapb2 (/) v (singleton n)
+    static member (/) (n: float, v: View) = mapb2 (/) (singleton n) v 
+
+    static member (%) (v: View, v': View) = mapb2 (%) v v'
+    static member (%) (v: View, n: float) = mapb2 (%) v (singleton n)
+    static member (%) (n: float, v: View) = mapb2 (%) (singleton n) v 
+
+    static member (~-) (v: View) = map (~-) v 
+    
+    static member Pow (v: View, v': View) = mapb2 (fun x y -> System.Math.Pow(x,y)) v v'
+    static member Pow (v: View, n: float) = mapb2 (fun x y -> System.Math.Pow(x,y)) v (singleton n)
+    static member Pow (n: float, v: View) = mapb2 (fun x y -> System.Math.Pow(x,y)) (singleton n) v 
 
