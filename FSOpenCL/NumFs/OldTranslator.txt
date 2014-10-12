@@ -1,0 +1,93 @@
+﻿//type ExprMeta = obj
+//type GeneratorOutput = Expr * ExprMeta
+//
+//type FuncInfo = {HostFunc: MethodInfo; Generator: Expr list -> }
+//type TypeInfo = {HostType: Type; MetaType: Type}
+//
+//let hostFuncs = Dictionary<MethodInfo, FuncInfo>()
+//let hostTypes = Dictionary<Type, TypeInfo>()
+//
+//let extractMethodInfo call =
+//    match call with
+//    | Call (obj, methodInfo, arguments) -> methodInfo
+//    | _ -> failwith "quotation must consists of a single call"
+//
+//let registerTargetFunc hostFunc generator =
+//    hostFuncs.Add(extractMethodInfo hostFunc, 
+//                  {HostFunc=extractMethodInfo hostFunc
+//                   Generator=extractMethodInfo generator})
+//
+//let registerType hostType metaType =
+//    hostTypes.Add(hostType, 
+//                  {HostType=hostType; MetaType=metaType})
+
+//let rec substTargetFuncs expression =
+//    match expression with
+//    | Call (oObj, methodInfo, arguments) as e when hostFuncs.ContainsKey(methodInfo) ->
+//        let fi = hostFuncs.[methodInfo]
+//        printfn "substituting host function %s with target function %s" methodInfo.Name fi.Generator.Name
+//
+//        for p in methodInfo.GetParameters() do
+//            if hostTypes.ContainsKey(p.ParameterType) then
+//                printfn "found registered type %s" p.ParameterType.Name
+//
+//        match oObj with
+//        | Some obj -> Expr.Call (obj, fi.Generator, arguments)
+//        | None -> Expr.Call (fi.Generator, arguments)       
+//    | ShapeVar var -> Expr.Var var
+//    | ShapeLambda (var, expr) -> Expr.Lambda (var, substTargetFuncs expr)
+//    | ShapeCombination(shapeComboObject, exprList) ->
+//        RebuildShapeCombination(shapeComboObject, List.map substTargetFuncs exprList)
+
+
+let rec translate expression =
+    match expression with
+    | Call (oObj, methodInfo, arguments) as e when hostFuncs.ContainsKey(methodInfo) ->
+        let fi = hostFuncs.[methodInfo]
+
+        printfn "executing generator for host function %s" methodInfo.Name 
+
+        for p in methodInfo.GetParameters() do
+            if hostTypes.ContainsKey(p.ParameterType) then
+                printfn "found registered type %s" p.ParameterType.Name
+
+        match oObj with
+        | Some obj -> Expr.Call (obj, fi.Generator, arguments)
+        | None -> Expr.Call (fi.Generator, arguments)       
+    | ShapeVar var -> Expr.Var var
+    | ShapeLambda (var, expr) -> Expr.Lambda (var, substTargetFuncs expr)
+    | ShapeCombination(shapeComboObject, exprList) ->
+        RebuildShapeCombination(shapeComboObject, List.map substTargetFuncs exprList)
+
+
+
+
+Test:
+
+
+
+type ViewMeta = {a: float}
+let a1m = {a=0.}
+
+[<ReflectedDefinition>]
+let testHost (a: View) = a + 1.
+
+[<ReflectedDefinition>]
+let testTarget (a: View) = 2. * a
+
+[<ReflectedDefinition>]
+let testMeta (a: ViewMeta) = {a=2.*a.a}
+
+registerTargetFunc <@ testHost a1 @> <@ testTarget a1 @> <@ testMeta a1m @>
+registerType typeof<View> typeof<ViewMeta>
+
+
+let b = 3
+let input = <@ 3. + testHost a1  @>
+printfn "original expr:     %A" input
+let output = substTargetFuncs input 
+printfn "substituted expr:  %A" output
+
+printfn "method call: %A" <@ a1.ToString() @>
+
+

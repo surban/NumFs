@@ -56,9 +56,12 @@
   <ItemGroup>
     <None Include="App.config" />
     <Content Include="packages.config" />
+    <Compile Include="Util.fs" />
     <Compile Include="NDArray.fs" />
-    <Compile Include="Compiler.fs" />
+    <Compile Include="ExprTree.fs" />
+    <Compile Include="Translator.fs" />
     <None Include="NDArrayTest.fsx" />
+    <Content Include="OldTranslator.txt" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSCL.Compiler">
